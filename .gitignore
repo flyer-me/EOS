@@ -2,6 +2,7 @@
 /bochs
 /Debug
 /Release
+/sdk
 *.bak
 *.lst
 *.o
