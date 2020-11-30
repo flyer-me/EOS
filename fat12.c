@@ -29,7 +29,6 @@ FatInitializeDriver(
 }
 
 
-VIOD AAAAAAAASBSYSYSSYS(){}
 //
 // 驱动程序的 AddDevice 功能函数。
 //
