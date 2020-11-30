@@ -8,8 +8,6 @@ Copyright (c) 2008 北京英真时代科技有限公司。保留所有权利。
 文件名: fat12.c
 
 描述: FAT12 文件系统驱动的实现。
-和我有仇是吧
-
 
 *******************************************************************************/
 
@@ -30,6 +28,8 @@ FatInitializeDriver(
 	DriverObject->Set = FatSet;
 }
 
+
+VIOD AAAAAAAASBSYSYSSYS(){}
 //
 // 驱动程序的 AddDevice 功能函数。
 //
