@@ -9,8 +9,6 @@ Copyright (c) 2008 北京英真时代科技有限公司。保留所有权利。
 
 描述: FAT12 文件系统驱动的实现。
 
-
-
 *******************************************************************************/
 
 #include "iop.h"
@@ -29,6 +27,7 @@ FatInitializeDriver(
 	DriverObject->Query = FatQuery;
 	DriverObject->Set = FatSet;
 }
+
 
 //
 // 驱动程序的 AddDevice 功能函数。
@@ -820,42 +819,93 @@ FatReadFile(
 	}
 }
 
+
 STATUS
 FatWriteFile(
 	IN PVCB Vcb,
 	IN PFCB File,
 	IN ULONG Offset,
 	IN ULONG BytesToWrite,
-	IN PVOID Buffer,
+	OUT PVOID Buffer,
 	OUT PULONG BytesWriten
 	)
-/*++
-
-功能描述：
-	在文件指定的偏移位置开始写数据，如果偏移位置小于文件大小则覆盖原有内容，如果
-	写范围超出文件大小则自动增加文件大小，如果文件大小增加后超过文件占用的磁盘空
-	间大小则自动为文件分配新的簇，增加文件占用的磁盘空间。
-	这里注意两个概念，文件大小和文件占用磁盘空间。因为文件占用磁盘空间是以簇为单
-	位的，而文件大小的单位是字节，所以文件大小 <= 文件占用磁盘空间，所以当文件长
-	度增加时，并不一定要增加磁盘占用空间。例如一个文件当前只有1字节，那么它占用了
-	一个簇的磁盘空间。当文件大小增加到10字节时，它占用的磁盘空间仍然为一个簇。当
-	它的大小增加到超过一个簇的大小时，那么就需要为它增加磁盘空间了。
-
-参数：
-	Vcb -- 卷控制块指针。
-	File -- 文件控制块指针。
-	Offset -- 开始写的偏移位置。
-	BytesToWrite -- 写的字节数。
-	Buffer -- 指向存放要写的数据。
-	BytesWriten -- 指针，指向用于保存实际完成写的字节数的变量。
-
-返回值：
-	如果成功则返回STATUS_SUCCESS。
-
---*/
 {
-	return STATUS_NOT_SUPPORTED;
+	STATUS Status;
+
+	// 由于在将新分配的簇插入簇链尾部时，必须知道前一个簇的簇号，
+	// 所以定义了“前一个簇号”和“当前簇号”两个变量。
+	USHORT PrevClusterNum, CurrentClusterNum;
+	USHORT NewClusterNum;
+	ULONG ClusterIndex;
+	ULONG FirstSectorOfCluster;
+	ULONG OffsetInSector;
+	
+	ULONG i;
+
+	// 写入的起始位置不能超出文件大小（并不影响增加文件大小或增加簇，想想原因？）
+	if (Offset > File->FileSize)
+		return STATUS_SUCCESS;
+
+	// 根据簇的大小，计算写入的起始位置在簇链的第几个簇中（从 0 开始计数）
+	ClusterIndex = Offset / FatBytesPerCluster(&Vcb->Bpb);
+	
+	// 顺着簇链向后查找写入的起始位置所在簇的簇号。
+	PrevClusterNum = 0;
+	CurrentClusterNum = File->FirstCluster;
+	for (i = ClusterIndex; i > 0; i--) {
+		PrevClusterNum = CurrentClusterNum;
+		CurrentClusterNum = FatGetFatEntryValue(Vcb, PrevClusterNum);	
+	}
+
+	// 如果写入的起始位置还没有对应的簇，就增加簇
+	if (0 == CurrentClusterNum || CurrentClusterNum >= 0xFF8) {
+
+		// 为文件分配一个空闲簇
+		FatAllocateOneCluster(Vcb, &NewClusterNum);
+
+		// 将新分配的簇安装到簇链中
+		if (0 == File->FirstCluster)
+			File->FirstCluster = NewClusterNum;
+		else
+			FatSetFatEntryValue(Vcb, PrevClusterNum, NewClusterNum);
+		
+		CurrentClusterNum = NewClusterNum;
+	}
+
+	// 计算当前簇的第一个扇区的扇区号。簇从 2 开始计数。
+	FirstSectorOfCluster = Vcb->FirstDataSector + (CurrentClusterNum - 2) * Vcb->Bpb.SectorsPerCluster;
+	
+	// 计算写位置在扇区内的字节偏移。
+	OffsetInSector = Offset % Vcb->Bpb.BytesPerSector;
+
+	// 为了简单，暂时只处理一个簇包含一个扇区的情况。
+	// 并且只处理写入的数据在一个扇区范围内的情况。
+	Status = IopReadWriteSector( Vcb->DiskDevice,
+									FirstSectorOfCluster,
+									OffsetInSector,
+									(PCHAR)Buffer,
+									BytesToWrite,
+									FALSE );
+
+	if (!EOS_SUCCESS(Status))
+		return Status;
+
+	// 如果文件长度增加了则必须修改文件的长度。
+	if (Offset + BytesToWrite > File->FileSize) {
+		File->FileSize = Offset + BytesToWrite;
+		
+		// 如果是数据文件则需要同步修改文件在磁盘上对应的 DIRENT 结构
+		// 体。目录文件的 DIRENT 结构体中的 FileSize 永远为 0，无需修改。
+		if (!File->AttrDirectory)
+			FatWriteDirEntry(Vcb, File);
+	}
+	
+	// 返回实际写入的字节数量
+	*BytesWriten = BytesToWrite;
+
+	return STATUS_SUCCESS;
 }
+
 
 STATUS
 FatOpenFileInDirectory(
