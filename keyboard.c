@@ -574,6 +574,19 @@ KbdIsr(
 	//
 	IopWriteRingBuffer(Ext->Buffer, &KeyEventRecord, sizeof(KEY_EVENT_RECORD));
 	PsSetEvent(&Ext->BufferEvent);
+	
+	//空格提升当前线程优先级
+	if(0x39 == ScanCode[0])//空格
+	{
+		if(PspCurrentThread -> Priority > 0 && PspCurrentThread -> Priority < 8){
+			//提升优先级
+			PspCurrentThread -> Priority = 8;
+			//根据优先级重新分配时间片
+			PspCurrentThread->RemainderTicks = TICKS_OF_TIME_SLICE *(9 - PspCurrentThread->Priority);
+			PspCurrentThread->InitialTimeCount = TICKS_OF_TIME_SLICE *(9 - PspCurrentThread->Priority);
+
+		}
+	}
 }
 
 //

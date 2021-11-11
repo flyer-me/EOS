@@ -611,6 +611,9 @@ PspCreateThread(
 		ListInitializeHead(&NewThread->WaitListHead);
 		PspInitializeThreadContext(NewThread);		// 初始化线程的处理器上下文。
 		NewThread->AttachedPas = Process->Pas;		// 线程在所在进程的地址空间中执行。
+		
+		NewThread->TimeCountInLife = 0;                //线程整个生命周期中合计使用时间片数量
+		NewThread->InitialTimeCount = TICKS_OF_TIME_SLICE;               //线程的初始时间片数量
 
 		//
 		// 将线程插入所在进程的线程链表。

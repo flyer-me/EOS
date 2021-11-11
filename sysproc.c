@@ -98,6 +98,13 @@ ConsoleCmdDir(
 	IN HANDLE StdHandle
 	);
 
+PRIVATE
+VOID
+ConoleCmdUp(
+	IN HANDLE StdHandle,
+	IN PCSTR Arg
+	);
+
 ULONG
 KiInitializationThread(
 	IN PVOID Parameter
@@ -302,6 +309,11 @@ KiShellThread(
 			continue;
 		} else if (0 == stricmp(Line, "dir")) {
 			ConsoleCmdDir(StdHandle);
+			continue;
+		}
+		//添加up命令
+		else if (0 == stricmp(Line, "up")) {
+			ConoleCmdUp(StdHandle,Arg);
 			continue;
 		}
 
@@ -676,8 +688,10 @@ ThreadFunction(
 		__asm("cli");
 		PsGetThreadPriority(CURRENT_THREAD_HANDLE, &Priority);
 		SetConsoleCursorPosition(pThreadParameter->StdHandle, CursorPosition);
-		fprintf(pThreadParameter->StdHandle, "Thread %d (ID:%d, Priority:%d): %u ",
-			pThreadParameter->Y, ObGetObjectId(PspCurrentThread),Priority, i);
+		//fprintf(pThreadParameter->StdHandle, "Thread %d (ID:%d, Priority:%d): %u ",
+		//	pThreadParameter->Y, ObGetObjectId(PspCurrentThread),Priority, i);
+		fprintf(pThreadParameter->StdHandle, "Thread %d ID:%d, Priority:%d, InitTicks:%d, UedTicks:%d, RemainderTick:%d ",
+			pThreadParameter->Y, ObGetObjectId(PspCurrentThread),Priority,PspCurrentThread->InitialTimeCount,PspCurrentThread->InitialTimeCount-PspCurrentThread->RemainderTicks,PspCurrentThread->RemainderTicks);
 		__asm("sti");
 	}
 	
@@ -729,7 +743,7 @@ ConsoleCmdRoundRobin(
 	
 	// 当前线程等待一段时间。由于当前线程优先级 24 高于新建线程的优先级 8，
 	// 所以只有在当前线程进入“阻塞”状态后，新建的线程才能执行。
-	Sleep(40 * 1000);
+	Sleep(200 * 1000);//Sleep(40 * 1000);
 	
 	// 当前线程被唤醒后，会抢占处理器。强制结束所有新建的线程。
 	for (i = 0; i < 10; i++) {
@@ -1213,6 +1227,53 @@ ConsoleCmdProcAndThread(
 	}
 	
 	KeEnableInterrupts(IntState);	// 开中断
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+//
+// 下面是和控制台命令 up 相关的代码。
+//
+PRIVATE
+VOID
+ConoleCmdUp(
+	IN HANDLE StdHandle,
+	IN PCSTR Arg
+)
+{	
+	ULONG ThreadID;
+	HANDLE hThread;
+	PTHREAD pThread;
+	
+	//
+	// 从命令参数字符串中获得线程 ID。
+	//
+	ThreadID = atoi(Arg);
+	if(0 == ThreadID) {
+		fprintf(StdHandle, "Please input a valid thread ID.\n");
+		return;
+	}
+	
+	//
+	// 由线程 ID 获得线程句柄
+	//
+	hThread = (HANDLE)OpenThread(ThreadID);
+	if (NULL == hThread) {
+		fprintf(StdHandle, "%d is an invalid thread ID.\n", ThreadID);
+		return;
+	}
+		
+	//
+	// 提升线程优先级
+	//
+	PsSetThreadPriority(hThread, 8);
+	
+	//
+	// 关闭线程句柄
+	//
+	CloseHandle(hThread);
+	
+	return;
 }
 
 

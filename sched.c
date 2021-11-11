@@ -360,7 +360,33 @@ PspRoundRobin(
 	//
 	// 在此添加代码，实现时间片轮转调度算法。
 	//
-	
+	//判断被中断线程处于运行状态而不是阻塞状态
+	if(NULL != PspCurrentThread && Running == PspCurrentThread->State)
+	{
+		//被中断进程时间片减一
+		PspCurrentThread->RemainderTicks--;
+		
+		//判断被中断线程的剩余时间片是否等于0
+		if(PspCurrentThread->RemainderTicks == 0)
+		{
+			//重新为被中断线程分配时间片
+			PspCurrentThread->TimeCountInLife++;
+			
+			// 线程优先级降低
+			if(PspCurrentThread->Priority>1) PspCurrentThread->Priority--;
+			
+			//时间片增加（根据优先级分配时间片）
+			PspCurrentThread->RemainderTicks = TICKS_OF_TIME_SLICE *(9 - PspCurrentThread->Priority);
+			PspCurrentThread->InitialTimeCount = TICKS_OF_TIME_SLICE *(9 - PspCurrentThread->Priority);
+			
+			//判断是否存在和被中断线程优先级相同的就绪进程
+			if(!ListIsEmpty(&PspReadyListHeads[PspCurrentThread->Priority]))
+			{
+				//将被中断线程转入就绪状态，并插到对应的优先级就绪队列的队尾
+				PspReadyThread(PspCurrentThread);
+			}
+		}	
+	}
 	return;
 }
 
@@ -612,6 +638,10 @@ PsSetThreadPriority(
 			PspUnreadyThread(Thread);
 
 			Thread->Priority = Priority;
+			
+			//根据优先级重新分配时间片
+			PspCurrentThread->RemainderTicks = TICKS_OF_TIME_SLICE *(9 - PspCurrentThread->Priority);
+			PspCurrentThread->InitialTimeCount = TICKS_OF_TIME_SLICE *(9 - PspCurrentThread->Priority);
 
 			//
 			// 线程插入新优先级对应的就绪队列的队尾。

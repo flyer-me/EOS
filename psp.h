@@ -94,6 +94,10 @@ typedef	struct _THREAD {
 
 	ULONG LastError;					// 线程最近一次的错误码
 	ULONG ExitCode;						// 线程的退出码
+	
+	INT TimeCountInLife;                //线程整个生命周期中合计使用时间片数量
+	INT InitialTimeCount;               //线程的初始时间片数量
+	
 } THREAD;
 
 //
@@ -117,7 +121,8 @@ typedef enum _THREAD_STATE {
 //
 // 用于时间片轮转调度的时间片大小（即时间片包含的时钟滴答数）
 //
-#define TICKS_OF_TIME_SLICE		6
+//#define TICKS_OF_TIME_SLICE		6
+#define TICKS_OF_TIME_SLICE		100
 
 //
 // 线程内核栈大小--2 个页面。
